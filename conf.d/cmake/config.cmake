@@ -68,9 +68,9 @@ set (gcc_minimal_version 4.9)
 set (PKG_REQUIRED_LIST
 	json-c
 	libsystemd>=222
-	afb-daemon
 	glib-2.0
 	gobject-2.0
+    libiio
 )
 
 # Static constante definition

@@ -18,13 +18,15 @@
 ###########################################################################
 
 # Add target to project dependency list
-PROJECT_TARGET_ADD(accelero-binding)
+PROJECT_TARGET_ADD(iiodevices-binding)
 
 	# Define project Targets
-	set(accelero_SOURCES
-		accelero-binding.c)
+	set(iiodevices_SOURCES
+		iiodevices-binding.c
+        config_iiodevices.c
+        )
 
-	add_library(${TARGET_NAME} MODULE ${accelero_SOURCES})
+	add_library(${TARGET_NAME} MODULE ${iiodevices_SOURCES})
 
 	# Binder exposes a unique public entry point
 	SET_TARGET_PROPERTIES(${TARGET_NAME} PROPERTIES
@@ -36,7 +38,3 @@ PROJECT_TARGET_ADD(accelero-binding)
 
 	# Library dependencies (include updates automatically)
 	TARGET_LINK_LIBRARIES(${TARGET_NAME} ${link_libraries})
-
-	# installation directory
-	INSTALL(TARGETS ${TARGET_NAME}
-		LIBRARY DESTINATION ${BINDINGS_INSTALL_DIR})
