@@ -18,13 +18,13 @@
 
 # Project Info
 # ------------------
-set(PROJECT_NAME agl-service-radio)
+set(PROJECT_NAME agl-service-iiodevices)
 set(PROJECT_VERSION "1.0")
-set(PROJECT_PRETTY_NAME "Radio binding service")
-set(PROJECT_DESCRIPTION "Expose Radio Low Level APIs through AGL Framework")
+set(PROJECT_PRETTY_NAME "iiodevices binding service")
+set(PROJECT_DESCRIPTION "Get data from acceleration, gyroscope and electronic compass")
 set(PROJECT_ICON "icon.png")
-set(PROJECT_AUTHOR "Scott Murray")
-set(PROJECT_AUTHOR_MAIL "scott.murray@konsulko.com")
+set(PROJECT_AUTHOR "Clément Bénier")
+set(PROJECT_AUTHOR_MAIL "clement.benier@iot.bzh")
 set(PROJECT_LICENSE "APL2.0")
 set(PROJECT_LANGUAGES,"C")
 
