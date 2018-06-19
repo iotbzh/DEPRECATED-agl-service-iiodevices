@@ -22,7 +22,6 @@
 struct client_channels {
     struct iio_channel *chn;
     int index;
-    char uid[100];
     int fd;
     uint64_t u_period;
     enum iio_elements iioelts;
@@ -240,7 +239,6 @@ static int read_data(struct client_channels *cl_chn, sd_event_source* src)
     char val[10];
 
     struct client_channels *p_cl_chn = cl_chn->first;
-    AFB_DEBUG("TOTOTO %p", p_cl_chn);
     while(p_cl_chn) {
         chn = p_cl_chn->chn;
         if(!chn) {
@@ -336,7 +334,6 @@ static struct client_channels *set_channel(const int index,
     if(g_index > channels.nb) {
         channels.channels[g_index].event = channels.channels[channels.nb].event;
         channels.channels[g_index - 1].next = &channels.channels[g_index];
-        strcpy(channels.channels[g_index].uid, first->uid);
     }
     iio_channel_enable(channels.channels[g_index].chn);
     return &channels.channels[g_index];
@@ -381,7 +378,7 @@ static struct afb_event* is_allocation_needed(struct iio_info *infos,
 
 static void init_channel(struct iio_device *dev,
         struct iio_info *infos, const int iioelts, struct client_channels **first,
-        const uint64_t u_period, const char* uid)
+        const uint64_t u_period)
 {
     if(!dev || !infos) {
         AFB_ERROR("dev=%p or infos=%p is null", dev, infos);
@@ -408,7 +405,6 @@ static void init_channel(struct iio_device *dev,
         channels.channels[channels.nb].u_period = u_period;
         channels.channels[channels.nb].dev = dev;
         channels.channels[channels.nb].infos = infos;
-        strcpy(channels.channels[channels.nb].uid, uid);
         *first = &channels.channels[channels.nb];
     }
     else
@@ -446,47 +442,24 @@ static bool is_new_event_needed(struct iio_info *infos, const uint64_t u_period)
     return true;
 }
 
-struct client_channels *looking_for_chn(struct iio_info *infos, const char* uid)
-{
-    struct client_channels *cl_chn = NULL;
-    int i = 0;
-    while(i < channels.nb) {
-        cl_chn = &channels.channels[i];
-        if(!strcasecmp(uid, cl_chn->uid) && cl_chn->infos == infos)
-            return cl_chn;
-        i++;
-    }
-    return NULL;
-}
-
-static bool is_uid_used(struct iio_info *infos, const char* uid)
-{
-    return looking_for_chn(infos, uid);
-}
-
 static void subscribe(struct afb_req request)
 {
     const char *value = afb_req_value(request, "event");
-    const char *uid = afb_req_value(request, "uid");
     const char *s_iioelts = afb_req_value(request, "args");
     const char *freq = afb_req_value(request, "frequency");
 
-    if(!value || !uid || !s_iioelts) {
-        afb_req_fail(request, "failed", "please, fill 'event', 'uid' and 'args' fields");
+    if(!value || !s_iioelts) {
+        afb_req_fail(request, "failed", "please, fill 'event' and 'args' fields");
         return;
     }
 
-    AFB_INFO("subscription with: value=%s, uid=%s, s_iioelts=%s, freq=%s",
-            value, uid, s_iioelts, freq);
+    AFB_INFO("subscription with: value=%s, s_iioelts=%s, freq=%s",
+            value, s_iioelts, freq);
 
     bool found = false;
     for(int i = 0; i < IIO_INFOS_SIZE; i++) {
         if(!strcasecmp(value, iio_infos[i].id)) {
             found = true;
-            if(is_uid_used(&iio_infos[i], uid)) {
-                afb_req_fail(request, "failed", "uid is already used for this event, please changed");
-                return;
-            }
 
             struct iio_device *dev = init_dev(iio_infos[i].dev_name);
 
@@ -502,8 +475,7 @@ static void subscribe(struct afb_req request)
                         &iioelts, &first);
             }
             if(!p_event || event_needed) { //new cl_chn or event_needed
-                init_channel(dev, &iio_infos[i], iioelts, &first, u_period,
-                        uid);
+                init_channel(dev, &iio_infos[i], iioelts, &first, u_period);
                 if(!first) {
                     AFB_ERROR("first is null");
                     return;
@@ -511,6 +483,7 @@ static void subscribe(struct afb_req request)
                 init_event_io(dev, first);
                 p_event = first->event;
             }
+            afb_req_context_set(request, first, NULL);
 
             if(afb_req_subscribe(request, *p_event) != 0) {
                 afb_req_fail(request, "failed", "subscription failed");
@@ -528,9 +501,8 @@ static void subscribe(struct afb_req request)
 static void unsubscribe(struct afb_req request)
 {
     const char *value = afb_req_value(request, "event");
-    const char *uid = afb_req_value(request, "uid");
-    if(!value || !uid) {
-        afb_req_fail(request, "failed", "please, fill 'event', 'uid' fields");
+    if(!value) {
+        afb_req_fail(request, "failed", "please, fill 'event' fields");
         return;
     }
 
@@ -539,9 +511,10 @@ static void unsubscribe(struct afb_req request)
         for(int i = 0; i < IIO_INFOS_SIZE; i++) {
             if(!strcasecmp(value, iio_infos[i].id)) {
                 found = true;
-                struct client_channels *cl_chn = looking_for_chn(&iio_infos[i], uid);
+                struct client_channels *cl_chn = (struct client_channels *)afb_req_context_get(request);
                 if(!cl_chn) {
-                    AFB_ERROR("cannot find %s event with uid=%s", value, uid);
+                    AFB_ERROR("cannot find %s event, it seems that there was \
+                            no subscription", value);
                     return;
                 }
                 if(afb_req_unsubscribe(request, *cl_chn->event) != 0) {
