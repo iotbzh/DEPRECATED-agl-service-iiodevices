@@ -137,7 +137,7 @@ static void init_dev(struct client_sub *client)
 {
     if(!client) {
         AFB_ERROR("client is null");
-        return NULL;
+        return;
     }
 
     if(!ctx)
@@ -146,7 +146,7 @@ static void init_dev(struct client_sub *client)
     client->dev =  iio_context_find_device(ctx, client->infos->dev_name);
     if(!client->dev) {
         AFB_ERROR("No %s device found", client->infos->dev_name);
-        return NULL;
+        return;
     }
 }
 
@@ -157,18 +157,58 @@ static int read_infos(struct client_sub* client)
         AFB_ERROR("client=%p or client->channels=%p or client->channels->chn=%p is null", client, client->channels, client->channels->chn);
         return -1;
     }
-    struct iio_channel *chn = client->channels->chn;
-    json_object *jobject = client->jobject;
+    json_object *jobject = NULL;
     char val[100];
+    char keyfirst[100];
 
+    struct channels *channel = client->channels;
     //read all infos
-    for(int i = 0; i < iio_channel_get_attrs_count(chn); i++) {
-        const char *id_attr = iio_channel_get_attr(chn, i);
-		if(strcasecmp(id_attr, "raw")) { //do not take raw infos
-            iio_channel_attr_read(chn, id_attr, val, 100);
-            json_object *value = json_object_new_string(val);
-            json_object_object_add(jobject, id_attr, value);
+    while(channel) {
+        for(int i = 0; i < iio_channel_get_attrs_count(channel->chn); i++) {
+            const char *id_attr = iio_channel_get_attr(channel->chn, i);
+            if(!id_attr) {
+                AFB_ERROR("cannot get attr from channel %d", i);
+                return -1;
+            }
+            if(strcasecmp(id_attr, "raw")) { //do not take raw infos
+                iio_channel_attr_read(channel->chn, id_attr, val, 100);
+
+                //first channel
+                if(client->channels == channel) {
+                    json_object *value = json_object_new_string(val);
+                    json_object_object_add(client->jobject, id_attr, value);
+                }
+                else { //other channels: keep same value and stored other values
+                    /*no id_attr: looking for an already changed id*/
+                    if(!json_object_object_get_ex(client->jobject, id_attr, &jobject))
+                    {
+                        strcpy(keyfirst, id_attr);
+                        set_channel_name(keyfirst, client->channels->iioelts);
+                        if(!json_object_object_get_ex(client->jobject, keyfirst, &jobject)) {
+                            AFB_WARNING("cannot find %s keyfirst in json object",
+                                    keyfirst);
+                        }
+                    }
+
+                    const char * valfisrt = json_object_get_string(jobject); //get first value channel
+                    if(strcasecmp(val, valfisrt)) { //different value store it
+                        char key[100];
+                        strcpy(key, id_attr);
+                        set_channel_name(key, channel->iioelts); //add channel suffix
+                        json_object *value = json_object_new_string(val);
+                        json_object_object_add(client->jobject, key, value);
+
+                        //remove previous non unique key and replace it with suffix
+                        strcpy(keyfirst, id_attr);
+                        set_channel_name(keyfirst, client->channels->iioelts);
+                        json_object *valuefirst = json_object_new_string(valfisrt);
+                        json_object_object_add(client->jobject, keyfirst, valuefirst);
+                        json_object_object_del(client->jobject, id_attr);
+                    }
+                }
+            }
         }
+        channel = channel->next;
     }
     return 0;
 }
@@ -208,7 +248,7 @@ static struct client_sub* looking_for_previous(struct client_sub *client)
 {
     if(!client || !clients) {
         AFB_ERROR("client or clients is null pointer");
-        return;
+        return NULL;
     }
     struct client_sub* prev = clients;
     while(prev->next != client) {
@@ -346,7 +386,7 @@ static struct channels* set_channel(
     prev_chn->next = malloc(sizeof(struct channels));
     if(!prev_chn->next) {
         AFB_ERROR("alloc failed for channels");
-        return;
+        return NULL;
     }
 
     struct channels *chn = prev_chn->next;
@@ -371,8 +411,6 @@ static void init_channel(struct client_sub* client, const unsigned int iioelts)
         AFB_ERROR("client is null");
         return;
     }
-    char event_name[100];
-    const char *name = client->infos->id;
     AFB_DEBUG("size of channels=%d", get_iio_nb(iioelts));
 
     /*looking for the last channel: could be the first*/
@@ -420,7 +458,7 @@ static struct client_sub* is_new_client_sub_needed(struct iio_info* infos,
 }
 
 /*add new client with new event*/
-static struct client_sub *add_new_client(const struct iio_info *infos,
+static struct client_sub *add_new_client(struct iio_info *infos,
         const enum iio_elements iioelts, const uint64_t u_period)
 {
     struct client_sub *client = malloc(sizeof(struct client_sub));
