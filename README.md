@@ -34,9 +34,10 @@ Frequency is in Hertz, if the frequency is not filled, events are triggered via 
 ## Remaining issues
 
 - Provide a json config file so that configures the device name and the channel name.
-- Rework on channel structure and split it into client structure
 - Handle several values simultaneously, see trigger
 - Update it to other iiodevices
+- channel static infos: add suffix in json for each different static infos between channels
+- read channel values only for the maximum frequency
 
 ## M3ULCB Kingfisher
 
