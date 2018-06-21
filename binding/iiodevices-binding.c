@@ -9,6 +9,7 @@
 #include <sys/ioctl.h>
 #include <systemd/sd-event.h>
 #include <time.h>
+#include <limits.h>
 
 #include <json-c/json.h>
 #define AFB_BINDING_VERSION 2
@@ -22,7 +23,7 @@
 struct channels {
     struct iio_channel *chn;
     enum iio_elements iioelts;
-    char name[100];
+    char name[PATH_MAX];
     struct channels *next;
 };
 
@@ -45,7 +46,7 @@ struct event
 {
     struct event *next;
     struct afb_event event;
-    char tag[100];
+    char tag[PATH_MAX];
 };
 
 /*events*/
@@ -88,7 +89,7 @@ static struct afb_event* event_add(const char *tag)
 	/* creation */
 	e = malloc(strlen(tag) + sizeof *e);
 	if (!e) return NULL;
-	strcpy(e->tag, tag);
+	strncpy(e->tag, tag, PATH_MAX);
 
 	/* make the event */
 	e->event = afb_daemon_make_event(tag);
@@ -120,7 +121,7 @@ static int event_del(struct afb_event *event)
 	return 0;
 }
 
-/*initialse iio context*/
+/*initialise iio context*/
 int init_context()
 {
     ctx = iio_create_local_context();
@@ -158,8 +159,9 @@ static int read_infos(struct client_sub* client)
         return -1;
     }
     json_object *jobject = NULL;
-    char val[100];
-    char keyfirst[100];
+    size_t size = 1000;
+    char val[size];
+    char keyfirst[size];
 
     struct channels *channel = client->channels;
     //read all infos
@@ -182,7 +184,7 @@ static int read_infos(struct client_sub* client)
                     /*no id_attr: looking for an already changed id*/
                     if(!json_object_object_get_ex(client->jobject, id_attr, &jobject))
                     {
-                        strcpy(keyfirst, id_attr);
+                        strncpy(keyfirst, id_attr, size);
                         set_channel_name(keyfirst, client->channels->iioelts);
                         if(!json_object_object_get_ex(client->jobject, keyfirst, &jobject)) {
                             AFB_WARNING("cannot find %s keyfirst in json object",
@@ -192,14 +194,14 @@ static int read_infos(struct client_sub* client)
 
                     const char * valfisrt = json_object_get_string(jobject); //get first value channel
                     if(strcasecmp(val, valfisrt)) { //different value store it
-                        char key[100];
-                        strcpy(key, id_attr);
+                        char key[size];
+                        strncpy(key, id_attr, size);
                         set_channel_name(key, channel->iioelts); //add channel suffix
                         json_object *value = json_object_new_string(val);
                         json_object_object_add(client->jobject, key, value);
 
                         //remove previous non unique key and replace it with suffix
-                        strcpy(keyfirst, id_attr);
+                        strncpy(keyfirst, id_attr, size);
                         set_channel_name(keyfirst, client->channels->iioelts);
                         json_object *valuefirst = json_object_new_string(valfisrt);
                         json_object_object_add(client->jobject, keyfirst, valuefirst);
@@ -363,8 +365,9 @@ static void init_event_io(struct client_sub *client)
     read_infos(client); //get unchanged infos
     sd_event_source *source = NULL;
     if(client->u_period <= 0) { //no given frequency
-        char filename[100];
-        sprintf(filename, IIODEVICE"%s/%s", iio_device_get_id(client->dev),
+        char filename[PATH_MAX];
+        snprintf(filename, PATH_MAX,
+                IIODEVICE"%s/%s", iio_device_get_id(client->dev),
                 iio_channel_attr_get_filename(client->channels->chn, "raw"));
         if((client->fd = open(filename, O_RDONLY)) < 0) {
             AFB_ERROR("cannot open %s file", filename);
@@ -394,7 +397,7 @@ static struct channels* set_channel(
     chn->iioelts = i;
 
     /*set channel name with iio_elements*/
-    strcpy(chn->name, client->infos->id);
+    strncpy(chn->name, client->infos->id, PATH_MAX);
     set_channel_name(chn->name, i);
 
     if(!(chn->chn = iio_device_find_channel(client->dev, chn->name, false))) {
