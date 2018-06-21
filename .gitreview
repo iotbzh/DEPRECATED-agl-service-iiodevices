@@ -1,5 +1,5 @@
 [gerrit]
 host=gerrit.automotivelinux.org
 port=29418
-project=apps/agl-service-radio
+project=apps/agl-service-iiodevices
 defaultbranch=master
